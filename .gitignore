@@ -1,0 +1,65 @@
+*.py[cod]
+*.o
+*.d
+*.map
+*.bak
+
+# Eclipse Project Files
+.cproject
+.project
+.pydevproject
+
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+.eggs
+parts
+bin
+var
+sdist
+develop-eggs
+.installed.cfg
+lib
+lib64
+__pycache__
+*.spec
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+nosetests.xml
+coverage.xml
+cover
+htmlcov
+
+# Translations
+*.mo
+
+# ctags
+tags
+
+#PyCharm project files
+.idea
+
+# Visual Studio Code
+.vscode
+
+# Common virtualenv environment names
+/venv*
+
+.cache
+.pytest_cache
+
+src/libusb_package/_version.py
+
+# pyocd config files
+pyocd.yaml
+pyocd_user.py
+
+
