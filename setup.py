@@ -18,6 +18,7 @@
 import setuptools_scm  # noqa: F401
 import tomli  # noqa: F401
 
+from contextlib import contextmanager
 import glob
 import os
 from pathlib import Path
@@ -27,98 +28,145 @@ from setuptools.command.build_ext import build_ext
 import shutil
 import sysconfig
 
-ROOT_DIR = Path(__file__).resolve().parent
+# Use os.path.abspath() instead of Path.resolve() because the build on Windows won't work
+# if the resulting path is a UNC path, and resolve() likes to convert network shares mapped
+# to drive letters to their UNC form.
+ROOT_DIR = Path(os.path.abspath(__file__)).parent
+SCRIPTS_DIR = ROOT_DIR / "scripts"
+VSENV_SCRIPT = SCRIPTS_DIR / "vsenv.bat"
 LIBUSB_DIR = ROOT_DIR / "src" / "libusb"
 BOOTSTRAP_SCRIPT = LIBUSB_DIR / "bootstrap.sh"
 CONFIGURE_SCRIPT = LIBUSB_DIR / "configure"
+VS_PROJ = LIBUSB_DIR / "msvc" / "libusb_dll_2019.vcxproj"
 
 PACKAGE_NAME = 'libusb_package'
+
+# Check if we're running 64-bit Python
+IS_64_BIT = sys.maxsize > 2**32
+
+@contextmanager
+def temp_chdir(path: Path):
+    saved_cwd = Path.cwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(saved_cwd)
+
+def get_relative_sibling_path(from_path: Path, to_path: Path) -> Path:
+    # Get common path base of absolute from and to paths. We don't want to resolve symlinks, though.
+    from_path_abs = Path(os.path.abspath(from_path))
+    to_path_abs = Path(os.path.abspath(to_path))
+    common = Path(os.path.commonpath([from_path_abs, to_path_abs]))
+
+    # Generate a sequence of '..' steps to move from from_path to common.
+    from_rel = from_path_abs.relative_to(common)
+    up_path = os.path.join('', *([os.path.pardir] * len(from_rel.parts)))
+
+    # Combine into the final path.
+    result = up_path / to_path_abs.relative_to(common)
+    return result
 
 # Based on code from https://github.com/libdynd/dynd-python
 class libusb_build_ext(build_ext):
   description = "Build libusb for libusb-package"
 
   def run(self):
-    # We don't call the origin build_ext and ignore the default behavior.
+    # Don't call the origin build_ext and ignore the default behavior.
 
     # The staging directory for the module being built.
     if self.inplace:
         build_py = self.get_finalized_command('build_py')
-        build_lib = ROOT_DIR / build_py.get_package_dir(PACKAGE_NAME).parent
+        build_lib = ROOT_DIR / Path(build_py.get_package_dir(PACKAGE_NAME)).parent
     else:
-        build_lib = Path(self.build_lib).resolve()
-    build_temp = Path(self.build_temp).resolve()
+        build_lib = Path(os.path.abspath(self.build_lib))
+#     build_temp = Path(os.path.abspath(self.build_temp))
+
+    # Build in-tree for the time being. libusb commit 1001cb5 adds support for out of tree builds, but
+    # this is not yet supported in an existing release. Once libusb version 1.0.25 is released, we can
+    # build out of tree.
+    build_temp = LIBUSB_DIR
 
     print(f"build_temp = {build_temp}")
     print(f"build_lib = {build_lib}")
 
-    # Change to the build directory
-    saved_cwd = Path.cwd()
+    # Make sure the build directory exists.
     if not build_temp.is_dir():
         self.mkpath(str(build_temp))
-    os.chdir(build_temp)
 
-    if sys.platform != 'win32':
-        # First run bootstrap.sh.
-        self.spawn(['bash', str(BOOTSTRAP_SCRIPT)])
+    # Change to the build directory
+    with temp_chdir(build_temp):
+        if sys.platform != 'win32':
+            # Set optimization and enable extra warnings.
+            # These flags are taken from libusb/.private/ci-build.sh.
+            cflags = [
+                "-O2",
+                "-Winline",
+                "-Wmissing-include-dirs",
+                "-Wnested-externs",
+                "-Wpointer-arith",
+                "-Wredundant-decls",
+                "-Wswitch-enum",
+                ]
 
-        # Set optimization and enable extra warnings.
-        # These flags are taken from libusb/.private/ci-build.sh.
-        cflags = [
-            "-O2",
-            "-Winline",
-            "-Wmissing-include-dirs",
-            "-Wnested-externs",
-            "-Wpointer-arith",
-            "-Wredundant-decls",
-            "-Wswitch-enum",
-            ]
+            os.environ['CFLAGS'] = ' '.join(cflags)
 
-        os.environ['CFLAGS'] = ' '.join(cflags)
+            # Run bootstrap.sh, configure, and make.
+            self.spawn(['bash', str(BOOTSTRAP_SCRIPT)])
+            self.spawn(['bash', str(CONFIGURE_SCRIPT), '--disable-udev'])
+            self.spawn(['make', f'-j{os.cpu_count() or 4}'])
 
-        # Next, configure.
-        self.spawn(['bash', str(CONFIGURE_SCRIPT)])
+            if sys.platform == 'darwin':
+                shared_library_suffix = 'dylib'
+            else:
+                shared_library_suffix = 'so'
+            lib_paths = [Path(g) for g in glob.glob(f"libusb/.libs/*.{shared_library_suffix}")]
 
-        # And now make.
-        self.spawn(['make', f'-j{os.cpu_count() or 4}'])
-
-        if sys.platform == 'darwin':
-            shared_library_suffix = 'dylib'
+            # Sort libs by filename length. The shortest filename should be the most generic version.
+            lib_paths = sorted(lib_paths, key=lambda x: len(x.name))
         else:
-            shared_library_suffix = 'so'
-        lib_paths = [Path(g) for g in glob.glob(f"libusb/.libs/*.{shared_library_suffix}")]
-    else:
-        raise RuntimeError("no win32 support yet!")
+            platform = "x64" if IS_64_BIT else "x86"
+            config = "Release"
+            self.spawn(['cmd.exe', '/c', f'{VSENV_SCRIPT} && '
+                    f'msbuild -p:Configuration={config} -p:Platform={platform} {VS_PROJ}'])
 
-    if not lib_paths:
-        raise RuntimeError(f"libusb failed to build: no libraries found in {build_temp}")
+            out_dir = "x64" if IS_64_BIT else "Win32"
+            lib_paths = [Path(g) for g in glob.glob(f"{out_dir}\\{config}\\dll\\*.dll")]
 
-    # Sort libs by filename length.
-    lib_paths.sort(key=lambda x: len(x.name))
-    print(f"lib_paths={lib_paths}")
+        if not lib_paths:
+            raise RuntimeError(f"libusb failed to build: no libraries found in {build_temp}")
 
-    # Take the shortest filename, which should be the most generic version.
-    lib_path = lib_paths[0]
+        lib_path = lib_paths[0]
+        print(f"lib_path={lib_path}")
 
-    # Move the built C-extension to the place expected by the Python build
-    self._found_names = []
-    self._found_paths = []
+        # Copy the built C-extension to the place expected by the Python build.
+        self._found_names = []
+        self._found_paths = []
 
-    name = lib_path.name
-    ext_path = build_lib / PACKAGE_NAME / name
-    if ext_path.exists():
-        ext_path.unlink()
-    self.mkpath(str(ext_path.parent))
-    if not self.inplace:
-        print(f'Copying built {lib_path} to output path {ext_path}')
-        shutil.copy(lib_path, ext_path, follow_symlinks=True)
-    else:
-        print(f'Inplace: linking output path {ext_path} to built {lib_path}')
-        ext_path.symlink_to(lib_path)
-    self._found_names.append(name)
-    self._found_paths.append(str(lib_path))
-
-    os.chdir(saved_cwd)
+        name = lib_path.name
+        dest_path = build_lib / PACKAGE_NAME / name
+        if dest_path.exists() or dest_path.is_symlink():
+            print(f"{dest_path} already exists; unlinking")
+            dest_path.unlink()
+        self.mkpath(str(dest_path.parent))
+        if not self.inplace:
+            print(f"Copying built {lib_path} to output path {dest_path}")
+            shutil.copy(lib_path, dest_path, follow_symlinks=True)
+        else:
+            print(f"Inplace: linking output path {dest_path} to built {lib_path}")
+            link_dest = get_relative_sibling_path(dest_path.parent, lib_path)
+            print(f"Link dest is {link_dest}")
+            # Sadly, creating symlinks on Windows requires elevated permissions.
+            try:
+                dest_path.symlink_to(link_dest)
+            except OSError as err:
+                print(f"Error attempting to create symlink: {err}")
+                shutil.copy(lib_path, dest_path, follow_symlinks=True)
+                print(f"Falling back to copying built {lib_path} to output path {dest_path}")
+        if not Path(dest_path).exists():
+            raise RuntimeError("failed to copy/link destination file at {dest_path}")
+        self._found_names.append(name)
+        self._found_paths.append(str(lib_path))
 
   def get_names(self):
     return self._found_names
