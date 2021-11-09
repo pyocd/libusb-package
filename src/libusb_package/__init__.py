@@ -17,6 +17,7 @@
 import atexit
 import importlib.resources
 import functools
+import platform
 import sys
 from typing import (Any, Optional, TYPE_CHECKING)
 
@@ -24,6 +25,16 @@ from ._version import version as __version__
 
 if TYPE_CHECKING:
     from usb.backend import IBackend
+
+__all__ = ['find_library', 'get_libusb1_backend', 'find']
+
+# Look up the expected shared library filename extension by the OS.
+_LIBRARY_MAP_EXT = {
+        'Darwin': '.dylib',
+        'Linux': '.so',
+        'Windows': '.dll',
+    }
+_LIBRARY_EXT = _LIBRARY_MAP_EXT.get(platform.system(), None)
 
 @functools.lru_cache
 def find_library(candidate: str) -> Optional[str]:
@@ -36,8 +47,7 @@ def find_library(candidate: str) -> Optional[str]:
     @retval None No library matching the candidate name is contained in libusb_package.
     """
     for item in importlib.resources.contents('libusb_package'):
-#         print(f"find_library({candidate}): item={item}")
-        if not item.endswith(".py") and item.startswith(candidate):
+        if not item.endswith(".py") and item.startswith(candidate) and item.endswith(_LIBRARY_EXT):
             path_resource = importlib.resources.path('libusb_package', item)
             path = path_resource.__enter__()
 
@@ -45,7 +55,6 @@ def find_library(candidate: str) -> Optional[str]:
             def cleanup():
                 path_resource.__exit__(None, None, None)
 
-#             print(f"find_library({candidate}): p={p}")
             return str(path)
 
     # We don't have a matching library.
