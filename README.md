@@ -8,7 +8,7 @@ project that uses a libusb wrapper can also benefit.
 
 ## APIs
 
-There are three public functions exported by `libusb_package`.
+There are four public functions exported by `libusb_package`.
 
 - `find(*args, **kwargs)`: Wrapper around pyusb's `usb.core.find()` that sets the `backend`
     parameter to a libusb1 backend created from the libusb library included in `libusb_package`.
@@ -22,7 +22,20 @@ There are three public functions exported by `libusb_package`.
     no matching library is found. This function is suitable for use with the `find_library`
     callback parameter for pyusb's `get_backend()` functions.
 
-Both `get_libusb1_backend()` and `find_library(candidate)` cache their return values.
+    If `get_library_path()` returns None, indicating there is no included library, this function
+    will fall back to `ctypes.util.find_library()`.
+
+- `get_library_path()`: Returns an absolute Path object for the included library. If there is not
+    an included library, None is returned.
+
+Both `get_libusb1_backend()` and `get_library_path()` cache their return values.
+
+
+## Versioning
+
+The version of libusb-package is composed of the libusb version plus an additional field for
+the version of the Python code. For instance, 1.0.24.0. The Python code version will be reset
+to 0 when the libusb version is incremented for new libusb release.
 
 
 ## Examples
@@ -61,3 +74,7 @@ print(list(usb.core.find(find_all=True, backend=libusb1_backend)))
 ```
 
 
+### Source distribution
+
+Before building a source distribution, be sure to clean all untracked files from the libusb
+submodule using `git -C src/libusb clean -dfx`.
