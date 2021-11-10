@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import atexit
+import ctypes.util
 import importlib.resources
 import functools
 import platform
@@ -25,6 +26,7 @@ from ._version import version as __version__
 
 if TYPE_CHECKING:
     from usb.backend import IBackend
+    from pathlib import Path
 
 __all__ = ['find_library', 'get_libusb1_backend', 'find']
 
@@ -35,8 +37,24 @@ _LIBRARY_MAP_EXT = {
         'Windows': '.dll',
     }
 _LIBRARY_EXT = _LIBRARY_MAP_EXT.get(platform.system(), None)
+_LIBRARY_NAME = 'libusb-1.0' + _LIBRARY_EXT
 
 @functools.lru_cache
+def get_library_path() -> Optional["Path"]:
+    """@brief Returns the path to included library, if there is one."""
+    if importlib.resources.is_resource(__name__, _LIBRARY_NAME):
+        path_resource = importlib.resources.path(__name__, _LIBRARY_NAME)
+        path = path_resource.__enter__()
+
+        @atexit.register
+        def cleanup():
+            path_resource.__exit__(None, None, None)
+
+        return path
+    else:
+        return None
+
+
 def find_library(candidate: str) -> Optional[str]:
     """@brief Look for a package resource starting with the provided candidate name.
 
@@ -46,19 +64,23 @@ def find_library(candidate: str) -> Optional[str]:
     @retval str Path to the contained library matching the candidate name.
     @retval None No library matching the candidate name is contained in libusb_package.
     """
-    for item in importlib.resources.contents('libusb_package'):
-        if not item.endswith(".py") and item.startswith(candidate) and item.endswith(_LIBRARY_EXT):
-            path_resource = importlib.resources.path('libusb_package', item)
-            path = path_resource.__enter__()
+    lib_path = get_library_path()
+    if not lib_path:
+        # There is no library included in our installation, fall back to ctypes' find_library.
+        return ctypes.util.find_library(candidate)
 
-            @atexit.register
-            def cleanup():
-                path_resource.__exit__(None, None, None)
+    lib_name = lib_path.name
 
-            return str(path)
+    if lib_name.startswith(candidate) \
+            or ((platform.system() == "Linux") and lib_name.startswith("lib" + candidate)):
+        return str(lib_path)
 
     # We don't have a matching library.
     return None
+
+
+# pyusb is imported within the following functions so it isn't strictly required as a
+# dependency unless these functions are used.
 
 @functools.lru_cache
 def get_libusb1_backend() -> "IBackend":
@@ -67,9 +89,9 @@ def get_libusb1_backend() -> "IBackend":
     return usb.backend.libusb1.get_backend(find_library=find_library)
 
 
+# TODO correct the type signature of find()
 def find(*args: Any, **kwargs: Any) -> Any:
     """@brief Wrap pyusb's usb.core,find() function."""
-    # Import here so pyusb isn't strictly required as a dependency unless this function is used.
     import usb.core
     return usb.core.find(*args, backend=get_libusb1_backend(), **kwargs)
 
