@@ -25,6 +25,7 @@ from pathlib import Path
 import sys
 from setuptools import setup, Extension, Distribution
 from setuptools.command.build_ext import build_ext
+from setuptools._distutils.errors import DistutilsExecError
 import shutil
 import sysconfig
 
@@ -74,6 +75,9 @@ class libusb_build_ext(build_ext):
   def run(self):
     # Don't call the origin build_ext and ignore the default behavior.
 
+    self._found_names = []
+    self._found_paths = []
+
     # The staging directory for the module being built.
     if self.inplace:
         build_py = self.get_finalized_command('build_py')
@@ -95,78 +99,84 @@ class libusb_build_ext(build_ext):
         self.mkpath(str(build_temp))
 
     # Change to the build directory
-    with temp_chdir(build_temp):
-        if sys.platform != 'win32':
-            # Set optimization and enable extra warnings.
-            # These flags are taken from libusb/.private/ci-build.sh.
-            cflags = [
-                "-O2",
-                "-Winline",
-                "-Wmissing-include-dirs",
-                "-Wnested-externs",
-                "-Wpointer-arith",
-                "-Wredundant-decls",
-                "-Wswitch-enum",
-                ]
+    try:
+        with temp_chdir(build_temp):
+            if sys.platform != 'win32':
+                # Set optimization and enable extra warnings.
+                # These flags are taken from libusb/.private/ci-build.sh.
+                cflags = [
+                    "-O2",
+                    "-Winline",
+                    "-Wmissing-include-dirs",
+                    "-Wnested-externs",
+                    "-Wpointer-arith",
+                    "-Wredundant-decls",
+                    "-Wswitch-enum",
+                    ]
 
-            os.environ['CFLAGS'] = ' '.join(cflags)
+                os.environ['CFLAGS'] = ' '.join(cflags)
 
-            # Run bootstrap.sh, configure, and make.
-            self.spawn(['bash', str(BOOTSTRAP_SCRIPT)])
-            self.spawn(['bash', str(CONFIGURE_SCRIPT), '--disable-udev'])
-            self.spawn(['make', f'-j{os.cpu_count() or 4}'])
+                # Run bootstrap.sh, configure, and make.
+                self.spawn(['bash', str(BOOTSTRAP_SCRIPT)])
+                self.spawn(['bash', str(CONFIGURE_SCRIPT), '--disable-udev'])
+                self.spawn(['make', f'-j{os.cpu_count() or 4}'])
 
-            if sys.platform == 'darwin':
-                shared_library_suffix = 'dylib'
+                if sys.platform == 'darwin':
+                    shared_library_suffix = 'dylib'
+                else:
+                    shared_library_suffix = 'so'
+                lib_paths = [Path(g) for g in glob.glob(f"libusb/.libs/*.{shared_library_suffix}")]
+
+                # Sort libs by filename length. The shortest filename should be the most generic version.
+                lib_paths = sorted(lib_paths, key=lambda x: len(x.name))
             else:
-                shared_library_suffix = 'so'
-            lib_paths = [Path(g) for g in glob.glob(f"libusb/.libs/*.{shared_library_suffix}")]
+                platform = "x64" if IS_64_BIT else "x86"
+                config = "Release"
+                self.spawn(['cmd.exe', '/c', f'{VSENV_SCRIPT} && '
+                        f'msbuild -p:Configuration={config} -p:Platform={platform} {VS_PROJ}'])
 
-            # Sort libs by filename length. The shortest filename should be the most generic version.
-            lib_paths = sorted(lib_paths, key=lambda x: len(x.name))
-        else:
-            platform = "x64" if IS_64_BIT else "x86"
-            config = "Release"
-            self.spawn(['cmd.exe', '/c', f'{VSENV_SCRIPT} && '
-                    f'msbuild -p:Configuration={config} -p:Platform={platform} {VS_PROJ}'])
+                out_dir = "x64" if IS_64_BIT else "Win32"
+                lib_paths = [Path(g) for g in glob.glob(f"{out_dir}\\{config}\\dll\\*.dll")]
 
-            out_dir = "x64" if IS_64_BIT else "Win32"
-            lib_paths = [Path(g) for g in glob.glob(f"{out_dir}\\{config}\\dll\\*.dll")]
+            if not lib_paths:
+                raise RuntimeError(f"libusb failed to build: no libraries found in {build_temp}")
 
-        if not lib_paths:
-            raise RuntimeError(f"libusb failed to build: no libraries found in {build_temp}")
+            lib_path = lib_paths[0]
+            print(f"lib_path={lib_path}")
 
-        lib_path = lib_paths[0]
-        print(f"lib_path={lib_path}")
-
-        # Copy the built C-extension to the place expected by the Python build.
-        self._found_names = []
-        self._found_paths = []
-
-        name = lib_path.name
-        dest_path = build_lib / PACKAGE_NAME / name
-        if dest_path.exists() or dest_path.is_symlink():
-            print(f"{dest_path} already exists; unlinking")
-            dest_path.unlink()
-        self.mkpath(str(dest_path.parent))
-        if not self.inplace:
-            print(f"Copying built {lib_path} to output path {dest_path}")
-            shutil.copy(lib_path, dest_path, follow_symlinks=True)
-        else:
-            print(f"Inplace: linking output path {dest_path} to built {lib_path}")
-            link_dest = get_relative_sibling_path(dest_path.parent, lib_path)
-            print(f"Link dest is {link_dest}")
-            # Sadly, creating symlinks on Windows requires elevated permissions.
-            try:
-                dest_path.symlink_to(link_dest)
-            except OSError as err:
-                print(f"Error attempting to create symlink: {err}")
+            # Copy the built C-extension to the place expected by the Python build.
+            name = lib_path.name
+            dest_path = build_lib / PACKAGE_NAME / name
+            if dest_path.exists() or dest_path.is_symlink():
+                print(f"{dest_path} already exists; unlinking")
+                dest_path.unlink()
+            self.mkpath(str(dest_path.parent))
+            if not self.inplace:
+                print(f"Copying built {lib_path} to output path {dest_path}")
                 shutil.copy(lib_path, dest_path, follow_symlinks=True)
-                print(f"Falling back to copying built {lib_path} to output path {dest_path}")
-        if not Path(dest_path).exists():
-            raise RuntimeError("failed to copy/link destination file at {dest_path}")
-        self._found_names.append(name)
-        self._found_paths.append(str(lib_path))
+            else:
+                print(f"Inplace: linking output path {dest_path} to built {lib_path}")
+                link_dest = get_relative_sibling_path(dest_path.parent, lib_path)
+                print(f"Link dest is {link_dest}")
+                # Sadly, creating symlinks on Windows requires elevated permissions.
+                try:
+                    dest_path.symlink_to(link_dest)
+                except OSError as err:
+                    print(f"Error attempting to create symlink: {err}")
+                    shutil.copy(lib_path, dest_path, follow_symlinks=True)
+                    print(f"Falling back to copying built {lib_path} to output path {dest_path}")
+            if not Path(dest_path).exists():
+                raise RuntimeError("failed to copy/link destination file at {dest_path}")
+            self._found_names.append(name)
+            self._found_paths.append(str(lib_path))
+    except (DistutilsExecError, RuntimeError) as err:
+        print(f"Error while building libusb: {err!r} {err}")
+
+        # If we're building wheels in CI, re-raise the error!
+        if os.environ.get('CIBUILDWHEEL', 'x') != '1':
+            print("Ignoring build failure and creating system-only libusb-package")
+        else:
+            raise
 
   def get_names(self):
     return self._found_names
