@@ -1,3 +1,4 @@
 # setuptools_scm will ensure all files tracked by git are included
 
 global-exclude __pycache__ *.py[cod] .*
+graft src/libusb
