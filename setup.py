@@ -25,7 +25,6 @@ from pathlib import Path
 import sys
 from setuptools import setup, Extension, Distribution
 from setuptools.command.build_ext import build_ext
-from setuptools._distutils.errors import DistutilsExecError
 import shutil
 import sysconfig
 
@@ -44,6 +43,9 @@ PACKAGE_NAME = 'libusb_package'
 
 # Check if we're running 64-bit Python
 IS_64_BIT = sys.maxsize > 2**32
+
+class LibusbBuildError(RuntimeError):
+    """@brief Exception raised for errors attempting to build the libusb library."""
 
 @contextmanager
 def temp_chdir(path: Path):
@@ -98,8 +100,8 @@ class libusb_build_ext(build_ext):
     if not build_temp.is_dir():
         self.mkpath(str(build_temp))
 
-    # Change to the build directory
     try:
+        # Change to the build directory during the build.
         with temp_chdir(build_temp):
             if sys.platform != 'win32':
                 # Set optimization and enable extra warnings.
@@ -117,9 +119,17 @@ class libusb_build_ext(build_ext):
                 os.environ['CFLAGS'] = ' '.join(cflags)
 
                 # Run bootstrap.sh, configure, and make.
-                self.spawn(['bash', str(BOOTSTRAP_SCRIPT)])
-                self.spawn(['bash', str(CONFIGURE_SCRIPT), '--disable-udev'])
-                self.spawn(['make', f'-j{os.cpu_count() or 4}'])
+
+                try:
+                    self.spawn(['bash', str(BOOTSTRAP_SCRIPT)])
+                    self.spawn(['bash', str(CONFIGURE_SCRIPT), '--disable-udev'])
+                    self.spawn(['make', f'-j{os.cpu_count() or 4}'])
+                except Exception as err:
+                    # Exception is caught here and reraised as our specific Exception class because the actual
+                    # DistutilsExecError class raised on exceptions appears to be difficult to import to use in
+                    # the except clause, and may differ depending on the setuptools version (not confirmed).
+                    # Otoh, catching and ignoring all Exceptions (below) would be bad.
+                    raise LibusbBuildError(str(err)) from err
 
                 if sys.platform == 'darwin':
                     shared_library_suffix = 'dylib'
@@ -132,14 +142,19 @@ class libusb_build_ext(build_ext):
             else:
                 platform = "x64" if IS_64_BIT else "x86"
                 config = "Release"
-                self.spawn(['cmd.exe', '/c', f'{VSENV_SCRIPT} && '
-                        f'msbuild -p:Configuration={config} -p:Platform={platform} {VS_PROJ}'])
+
+                try:
+                    self.spawn(['cmd.exe', '/c', f'{VSENV_SCRIPT} && '
+                            f'msbuild -p:Configuration={config} -p:Platform={platform} {VS_PROJ}'])
+                except Exception as err:
+                    # See comment above for notes about this exception handler.
+                    raise LibusbBuildError(str(err)) from err
 
                 out_dir = "x64" if IS_64_BIT else "Win32"
                 lib_paths = [Path(g) for g in glob.glob(f"{out_dir}\\{config}\\dll\\*.dll")]
 
             if not lib_paths:
-                raise RuntimeError(f"libusb failed to build: no libraries found in {build_temp}")
+                raise LibusbBuildError(f"libusb failed to build: no libraries found in {build_temp}")
 
             lib_path = lib_paths[0]
             print(f"lib_path={lib_path}")
@@ -166,11 +181,11 @@ class libusb_build_ext(build_ext):
                     shutil.copy(lib_path, dest_path, follow_symlinks=True)
                     print(f"Falling back to copying built {lib_path} to output path {dest_path}")
             if not Path(dest_path).exists():
-                raise RuntimeError("failed to copy/link destination file at {dest_path}")
+                raise LibusbBuildError(f"failed to copy/link destination file at {dest_path}")
             self._found_names.append(name)
             self._found_paths.append(str(lib_path))
-    except (DistutilsExecError, RuntimeError) as err:
-        print(f"Error while building libusb: {err!r} {err}")
+    except LibusbBuildError as err:
+        print(f"Error while building libusb: {err}")
 
         # If we're building wheels in CI, re-raise the error!
         if os.environ.get('CIBUILDWHEEL', 'x') != '1':
