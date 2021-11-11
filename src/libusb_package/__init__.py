@@ -39,7 +39,7 @@ _LIBRARY_MAP_EXT = {
 _LIBRARY_EXT = _LIBRARY_MAP_EXT.get(platform.system(), None)
 _LIBRARY_NAME = 'libusb-1.0' + _LIBRARY_EXT
 
-@functools.lru_cache
+@functools.lru_cache()
 def get_library_path() -> Optional["Path"]:
     """@brief Returns the path to included library, if there is one."""
     if importlib.resources.is_resource(__name__, _LIBRARY_NAME):
@@ -82,7 +82,7 @@ def find_library(candidate: str) -> Optional[str]:
 # pyusb is imported within the following functions so it isn't strictly required as a
 # dependency unless these functions are used.
 
-@functools.lru_cache
+@functools.lru_cache()
 def get_libusb1_backend() -> "IBackend":
     """@brief Return a usb backend for pyusb."""
     import usb.backend.libusb1
