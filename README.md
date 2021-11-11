@@ -5,6 +5,23 @@ simplify installation of tools that require libusb. The main use case is so that
 don't have to install libusb manually for projects that use pyusb. However, any Python
 project that uses a libusb wrapper can also benefit.
 
+See [libusb.info](https://libusb.info) for more information about libusb.
+
+Note: currently the included libusb is built _without_ udev support on Linux.
+
+
+## Installation
+
+All releases include wheels for Linux, macOS, and Windows for multiple architectures. In addition, a source
+distribution is released.
+
+If a matching wheel is not available, the source distribution will be installed and libusb will be compiled.
+This means the libusb build requirements must be installed: autoconf, automake, libtool, and m4 for Linux and
+macOS (as mentioned above, libusb is built without udev support, so libudev-dev is not required).
+
+If the libusb build fails when installing from a source distribution, the `libusb-package` install _will still
+succeed_. In this case, it will attempt to fall back to a system installation of libusb.
+
 
 ## APIs
 
@@ -78,3 +95,9 @@ print(list(usb.core.find(find_all=True, backend=libusb1_backend)))
 
 Before building a source distribution, be sure to clean all untracked files from the libusb
 submodule using `git -C src/libusb clean -dfx`.
+
+
+### License
+
+The Python code for `libusb-package` is licensed with Apache 2.0.\
+The libusb library and its source code are licensed with GPLv2.
