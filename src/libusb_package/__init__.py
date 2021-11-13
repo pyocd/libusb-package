@@ -16,11 +16,17 @@
 
 import atexit
 import ctypes.util
-import importlib.resources
 import functools
 import platform
 import sys
 from typing import (Any, Optional, TYPE_CHECKING)
+
+# importlib.resources isn't available before Python 3.7, so if importing it
+# fails we import the backport.
+try:
+    from importlib import resources
+except ImportError:
+    import importlib_resources as resources
 
 from ._version import version as __version__
 
@@ -42,8 +48,8 @@ _LIBRARY_NAME = 'libusb-1.0' + _LIBRARY_EXT
 @functools.lru_cache()
 def get_library_path() -> Optional["Path"]:
     """@brief Returns the path to included library, if there is one."""
-    if importlib.resources.is_resource(__name__, _LIBRARY_NAME):
-        path_resource = importlib.resources.path(__name__, _LIBRARY_NAME)
+    if resources.is_resource(__name__, _LIBRARY_NAME):
+        path_resource = resources.path(__name__, _LIBRARY_NAME)
         path = path_resource.__enter__()
 
         @atexit.register
