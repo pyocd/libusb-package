@@ -36,7 +36,7 @@ _LIBRARY_MAP_EXT = {
         'Linux': '.so',
         'Windows': '.dll',
     }
-_LIBRARY_EXT = _LIBRARY_MAP_EXT.get(platform.system(), None)
+_LIBRARY_EXT = _LIBRARY_MAP_EXT.get(platform.system(), ".so")
 _LIBRARY_NAME = 'libusb-1.0' + _LIBRARY_EXT
 
 @functools.lru_cache()
