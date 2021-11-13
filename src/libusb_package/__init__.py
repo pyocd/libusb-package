@@ -89,10 +89,16 @@ def get_libusb1_backend() -> "IBackend":
     return usb.backend.libusb1.get_backend(find_library=find_library)
 
 
-# TODO correct the type signature of find()
+# TODO refine the type signature of find()
 def find(*args: Any, **kwargs: Any) -> Any:
-    """@brief Wrap pyusb's usb.core,find() function."""
+    """@brief Wrap pyusb's usb.core,find() function.
+
+    A 'backend' keyword argument will override the default of using `get_libusb1_backend()`.
+    If None is passed for 'backend', then the default backend lookup method of pyusb will
+    be used.
+    """
     import usb.core
-    return usb.core.find(*args, backend=get_libusb1_backend(), **kwargs)
+    backend = kwargs.pop('backend', get_libusb1_backend())
+    return usb.core.find(*args, backend=backend, **kwargs)
 
 
