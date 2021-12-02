@@ -1,7 +1,7 @@
 [build-system]
 requires = [
     "setuptools>=42",
-    "setuptools_scm[toml]>=3.4",
+    "setuptools_scm[toml]>=6.2",
     "wheel",
 ]
 build-backend = "setuptools.build_meta"
@@ -9,3 +9,7 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools_scm]
 write_to = "src/libusb_package/_version.py"
 fallback_version = "1.0.0.0"
+
+[tool.mypy]
+files = "src/libusb_package"
+ignore_missing_imports = true
