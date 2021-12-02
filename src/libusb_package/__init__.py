@@ -26,7 +26,7 @@ from typing import (Any, Optional, TYPE_CHECKING)
 try:
     from importlib import resources
 except ImportError:
-    import importlib_resources as resources
+    import importlib_resources as resources # type:ignore
 
 from ._version import version as __version__
 
@@ -89,7 +89,7 @@ def find_library(candidate: str) -> Optional[str]:
 # dependency unless these functions are used.
 
 @functools.lru_cache()
-def get_libusb1_backend() -> "IBackend":
+def get_libusb1_backend() -> Optional["IBackend"]:
     """@brief Return a usb backend for pyusb."""
     import usb.backend.libusb1
     return usb.backend.libusb1.get_backend(find_library=find_library)
