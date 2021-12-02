@@ -26,6 +26,7 @@ lib
 lib64
 __pycache__
 *.spec
+wheelhouse
 
 # Installer logs
 pip-log.txt
