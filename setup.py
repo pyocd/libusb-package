@@ -115,15 +115,35 @@ class libusb_build_ext(build_ext):
                     "-Wredundant-decls",
                     "-Wswitch-enum",
                     ]
+                extra_configure_args = []
+
+                # Special conditions when cibuildwheel is building us.
+                if os.environ.get('CIBUILDWHEEL') == '1':
+                    if sys.platform == 'darwin':
+                        # Support arm64 cross-compile builds from x86-64 on macOS from cibuildwheel.
+                        archflags = os.environ.get('ARCHFLAGS', '')
+                        if archflags:
+                            # Wrap in exception handler just in case something goes unexpectedly wrong, it
+                            # won't totally break all builds.
+                            try:
+                                arch = archflags.split()[-1]
+                                cflags += [archflags]
+                                extra_configure_args = [f'--host={arch}-apple-darwin']
+                            except Exception as err:
+                                print(f"Warning: failure to extract architecture from ARCHFLAGS='{archflags}' ({err})")
+                    else:
+                        # Don't include libudev (for now) on Linux since it isn't in the CI runner image.
+                        extra_configure_args = ['--disable-udev']
 
                 os.environ['CFLAGS'] = ' '.join(cflags)
 
                 # Run bootstrap.sh, configure, and make.
-
                 try:
+                    self.spawn(['env']) # Dump environment for debugging purposes.
                     self.spawn(['bash', str(BOOTSTRAP_SCRIPT)])
-                    self.spawn(['bash', str(CONFIGURE_SCRIPT), '--disable-udev'])
-                    self.spawn(['make', f'-j{os.cpu_count() or 4}'])
+                    self.spawn(['bash', str(CONFIGURE_SCRIPT), *extra_configure_args])
+                    self.spawn(['make', 'clean'])
+                    self.spawn(['make', f'-j{os.cpu_count() or 4}', 'all'])
                 except Exception as err:
                     # Exception is caught here and reraised as our specific Exception class because the actual
                     # DistutilsExecError class raised on exceptions appears to be difficult to import to use in

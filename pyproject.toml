@@ -13,3 +13,17 @@ fallback_version = "1.0.0.0"
 [tool.mypy]
 files = "src/libusb_package"
 ignore_missing_imports = true
+
+[tool.cibuildwheel]
+before-build = "python -m pip install --upgrade pip wheel setuptools setuptools_scm"
+build-verbosity = 1
+
+[tool.cibuildwheel.linux]
+archs = ["auto", "aarch64"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+before-build = "brew install autoconf automake libtool m4"
+
+[tool.cibuildwheel.windows]
+archs = ["auto"]
