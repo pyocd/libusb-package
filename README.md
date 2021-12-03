@@ -7,7 +7,10 @@ project that uses a libusb wrapper can also benefit.
 
 See [libusb.info](https://libusb.info) for more information about libusb.
 
-Note: currently the included libusb is built _without_ udev support on Linux.
+Note: Currently the included libusb is built _without_ udev support on Linux.
+
+Note: The libusb upstream git repository is included as a submodule, so you need to clone with submodules
+enabled. You can either clone with `--recurse-submodules` or run `git submodule update --init` after cloning.
 
 
 ## Installation
@@ -16,11 +19,21 @@ All releases include wheels for Linux, macOS, and Windows for multiple architect
 distribution is released.
 
 If a matching wheel is not available, the source distribution will be installed and libusb will be compiled.
-This means the libusb build requirements must be installed: autoconf, automake, libtool, and m4 for Linux and
-macOS (as mentioned above, libusb is built without udev support, so libudev-dev is not required).
+This means the libusb build requirements must be installed:
+
+- Linux and macOS: autoconf, automake, libtool, and m4. As mentioned above, libusb is built without udev support,
+    so libudev-dev is not required on Linux.
+- Windows: Visual Studio 2019 (Community is ok).
 
 If the libusb build fails when installing from a source distribution, the `libusb-package` install _will still
-succeed_. In this case, it will attempt to fall back to a system installation of libusb.
+succeed_. In this case, an "empty" `libusb-package` is installed that doesn't contain a libusb shared library.
+`get_library_path()` returns None and `find_library()` falls back to returning a system installation of libusb,
+if available.
+
+You can also install from a clone of the git repository by running `pip install .` from the repository root directory.
+Editable installs are supported. Please note that running `setup.py` directly is no longer supported for PEP 517
+compliant packages. When building from the repo, because libusb 1.0.24 does not support out of tree builds, the build is
+done in-place in the `src/libusb` directory. `make clean` is run before compiling to ensure a clean build.
 
 
 ## APIs
