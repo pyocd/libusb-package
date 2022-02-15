@@ -41,6 +41,15 @@ VS_PROJ = LIBUSB_DIR / "msvc" / "libusb_dll_2019.vcxproj"
 
 PACKAGE_NAME = 'libusb_package'
 
+# check for mingw environment (recommended method from msys2.org/docs/python)
+IS_CPYTHON_MINGW = os.name == "nt" and sysconfig.get_platform().startswith("mingw")
+
+if IS_CPYTHON_MINGW:
+    # if running cpython-mingw, path names get butchered in windows-posix conversion (or lack thereof),
+    # so fix them here
+    print("cpython-mingw detected!")
+    os.environ['ACLOCAL_PATH'] = os.environ.get('ACLOCAL_PATH').replace('\\', '/')
+
 # Check if we're running 64-bit Python
 IS_64_BIT = sys.maxsize > 2**32
 
@@ -69,6 +78,7 @@ def get_relative_sibling_path(from_path: Path, to_path: Path) -> Path:
     # Combine into the final path.
     result = up_path / to_path_abs.relative_to(common)
     return result
+
 
 # Based on code from https://github.com/libdynd/dynd-python
 class libusb_build_ext(build_ext):
@@ -103,7 +113,7 @@ class libusb_build_ext(build_ext):
     try:
         # Change to the build directory during the build.
         with temp_chdir(build_temp):
-            if sys.platform != 'win32':
+            if sys.platform != 'win32' or IS_CPYTHON_MINGW:
                 # Set optimization and enable extra warnings.
                 # These flags are taken from libusb/.private/ci-build.sh.
                 cflags = [
@@ -156,6 +166,8 @@ class libusb_build_ext(build_ext):
 
                 if sys.platform == 'darwin':
                     shared_library_suffix = 'dylib'
+                elif sys.platform == 'cygwin' or sys.platform == 'win32':
+                    shared_library_suffix = 'dll'
                 else:
                     shared_library_suffix = 'so'
                 lib_paths = [Path(g) for g in glob.glob(f"libusb/.libs/*.{shared_library_suffix}")]
