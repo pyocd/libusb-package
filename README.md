@@ -61,6 +61,16 @@ There are four public functions exported by `libusb_package`.
 Both `get_libusb1_backend()` and `get_library_path()` cache their return values.
 
 
+## Controlling the selected library
+
+By default, `find_library()` just compares the candidate name against the name of the built-in libusb shared
+library. (Unless an empty libusb_package was installed because building libusb failed. See
+[installation](#installation) for more on this.) The `LIBUSBPKG_LIB_PATH` environment variable can modify this
+behaviour. If set to "system", the standard OS-dependent ctypes system library search routine is used.
+Otherwise its value must be an absolute path to the libusb shared library which will be compared against. If
+the specified path does not exist, a warning is logged and the built-in library is used as normal.
+
+
 ## Versioning
 
 The version of libusb-package is composed of the libusb version plus an additional field for

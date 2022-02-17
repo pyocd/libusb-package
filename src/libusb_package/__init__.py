@@ -19,6 +19,8 @@ from __future__ import annotations
 import atexit
 import ctypes.util
 import functools
+import logging
+import os
 import platform
 import sys
 from typing import (Any, Optional, TYPE_CHECKING)
@@ -32,6 +34,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 __all__ = ['find_library', 'get_libusb1_backend', 'find']
+
+LOG = logging.getLogger('libusb_package')
 
 # Look up the expected shared library filename extension by the OS.
 _LIBRARY_MAP_EXT = {
@@ -69,18 +73,49 @@ def find_library(candidate: str) -> Optional[str]:
     This function effectively implements the `find_library` callback used by pyusb's backends.
     However, it is general enough to be used for any code that needs a libusb library.
 
+    By default, this function just compares the candidate against the name of the builtin libusb
+    shared library. The `LIBUSBPKG_LIB_PATH` environment variable can modify this behaviour.
+    If set to "system", the standard OS-dependent ctypes system library search routine is used.
+    Otherwise its value must be an absolute path to the libusb shared library which will be
+    compared against. If the specified path does not exist, a warning is logged and the built-in
+    library is used as normal.
+
     @retval str Path to the contained library matching the candidate name.
     @retval None No library matching the candidate name is contained in libusb_package.
     """
-    lib_path = get_library_path()
-    if not lib_path:
-        # There is no library included in our installation, fall back to ctypes' find_library.
-        return ctypes.util.find_library(candidate)
+    # Check the environment variable override.
+    if 'LIBUSBPKG_LIB_PATH' in os.environ:
+        env_value = os.environ['LIBUSBPKG_LIB_PATH']
+        LOG.debug(f"env_value={env_value}")
+        use_system = (env_value.casefold() == "system")
+        if use_system:
+            LOG.debug("using system libusb")
+    else:
+        env_value = None
+        use_system = False
+
+    lib_path = get_library_path() if not use_system else None
+    if use_system or not lib_path:
+        # Either there is no library included in our installation, or the user wants to bypass
+        # the builtin library, so fall back to ctypes' find_library.
+        system_result = ctypes.util.find_library(candidate)
+        LOG.debug(f"system returned '{system_result}'")
+        return system_result
+
+    # Allow user to override the library path.
+    if env_value:
+        env_lib_path = Path(env_value)
+        LOG.debug(f"using user-specified libusb path ({env_lib_path})")
+        if env_lib_path.exists():
+            lib_path = env_lib_path
+        else:
+            LOG.warning(f"LIBUSBPKG_LIB_PATH is set to not-existant path ({lib_path}); using built-in libusb")
 
     lib_name = lib_path.name
 
     if lib_name.startswith(candidate) \
             or ((platform.system() == "Linux") and lib_name.startswith("lib" + candidate)):
+        LOG.debug(f"returning '{lib_path}'")
         return str(lib_path)
 
     # We don't have a matching library.
