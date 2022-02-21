@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Chris Reed
+# Copyright (c) 2021-2022 Chris Reed
 # Copyright (c) 2022 Mitchell Kline
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -97,12 +97,10 @@ class libusb_build_ext(build_ext):
         build_lib = ROOT_DIR / Path(build_py.get_package_dir(PACKAGE_NAME)).parent
     else:
         build_lib = Path(os.path.abspath(self.build_lib))
-#     build_temp = Path(os.path.abspath(self.build_temp))
 
-    # Build in-tree for the time being. libusb commit 1001cb5 adds support for out of tree builds, but
-    # this is not yet supported in an existing release. Once libusb version 1.0.25 is released, we can
-    # build out of tree.
-    build_temp = LIBUSB_DIR
+    # Build out of tree. Requires libusb commit 1001cb5 which adds support for out of tree builds, present
+    # in libusb 1.0.25 and later.
+    build_temp = Path(os.path.abspath(self.build_temp))
 
     print(f"build_temp = {build_temp}")
     print(f"build_lib = {build_lib}")
@@ -156,7 +154,6 @@ class libusb_build_ext(build_ext):
                     self.spawn(['env']) # Dump environment for debugging purposes.
                     self.spawn(['bash', str(BOOTSTRAP_SCRIPT)])
                     self.spawn(['bash', str(CONFIGURE_SCRIPT), *extra_configure_args])
-                    self.spawn(['make', 'clean'])
                     self.spawn(['make', f'-j{os.cpu_count() or 4}', 'all'])
                 except Exception as err:
                     # Exception is caught here and reraised as our specific Exception class because the actual
