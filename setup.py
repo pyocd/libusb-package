@@ -115,7 +115,13 @@ class libusb_build_ext(build_ext):
                     "-Wredundant-decls",
                     "-Wswitch-enum",
                     ]
-                extra_configure_args = []
+
+                if sys.platform.startswith('linux'):
+                    # Don't include libudev (for now) on Linux since it isn't in the CI runner image. It's
+                    # excluded even on non-CI builds to keep the same feature set.
+                    extra_configure_args = ['--disable-udev']
+                else:
+                    extra_configure_args = []
 
                 # Special conditions when cibuildwheel is building us.
                 if os.environ.get('CIBUILDWHEEL') == '1':
@@ -128,12 +134,9 @@ class libusb_build_ext(build_ext):
                             try:
                                 arch = archflags.split()[-1]
                                 cflags += [archflags]
-                                extra_configure_args = [f'--host={arch}-apple-darwin']
+                                extra_configure_args += [f'--host={arch}-apple-darwin']
                             except Exception as err:
                                 print(f"Warning: failure to extract architecture from ARCHFLAGS='{archflags}' ({err})")
-                    else:
-                        # Don't include libudev (for now) on Linux since it isn't in the CI runner image.
-                        extra_configure_args = ['--disable-udev']
 
                 os.environ['CFLAGS'] = ' '.join(cflags)
 
