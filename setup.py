@@ -175,10 +175,20 @@ class libusb_build_ext(build_ext):
             else:
                 platform = "x64" if IS_64_BIT else "x86"
                 config = "Release"
+                properties = {
+                    "Configuration": config,
+                    "Platform": platform,
+                    "IntermediateOutputPath": str(build_temp / platform / "obj") + "\\", # Must end with trailing slash.
+                    "OutDir": str(build_temp / platform / config) + "\\",
+                    #IntermediateOutputPath
+                    #OutputPath
+                    }
+
+                property_values = ';'.join(f'{k}={v}' for k, v in properties.items())
+                msbuild_cmd = f'msbuild -p:{property_values} {VS_PROJ}'
 
                 try:
-                    self.spawn(['cmd.exe', '/c', f'{VSENV_SCRIPT} && '
-                            f'msbuild -p:Configuration={config} -p:Platform={platform} {VS_PROJ}'])
+                    self.spawn(['cmd.exe', '/c', f'{VSENV_SCRIPT} && {msbuild_cmd}'])
                 except Exception as err:
                     # See comment above for notes about this exception handler.
                     raise LibusbBuildError(str(err)) from err
