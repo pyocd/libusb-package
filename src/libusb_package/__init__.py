@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Chris Reed
+# Copyright (c) 2021-2023 Chris Reed
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import atexit
 import ctypes.util
 import functools
@@ -21,12 +23,7 @@ import platform
 import sys
 from typing import (Any, Optional, TYPE_CHECKING)
 
-# importlib.resources isn't available before Python 3.7, so if importing it
-# fails we import the backport.
-try:
-    from importlib import resources
-except ImportError:
-    import importlib_resources as resources # type:ignore
+import importlib_resources
 
 from ._version import version as __version__
 
@@ -46,15 +43,20 @@ _LIBRARY_EXT = _LIBRARY_MAP_EXT.get(platform.system(), ".so")
 _LIBRARY_NAME = 'libusb-1.0' + _LIBRARY_EXT
 
 @functools.lru_cache()
-def get_library_path() -> Optional["Path"]:
-    """@brief Returns the path to included library, if there is one."""
-    if resources.is_resource(__name__, _LIBRARY_NAME):
-        path_resource = resources.path(__name__, _LIBRARY_NAME)
-        path = path_resource.__enter__()
+def get_library_path() -> Optional[Path]:
+    """@brief Returns the path to included library, if there is one.
+
+    The path is valid until the process exits. If the library was extracted from a zip in order to
+    be accessible as a file, it will be cleaned up with the process exits.
+    """
+    lib_resource = importlib_resources.files(__name__).joinpath(_LIBRARY_NAME)
+    if lib_resource.is_file():
+        path_context = importlib_resources.as_file(lib_resource)
+        path = path_context.__enter__()
 
         @atexit.register
         def cleanup():
-            path_resource.__exit__(None, None, None)
+            path_context.__exit__(None, None, None)
 
         return path
     else:
@@ -89,7 +91,7 @@ def find_library(candidate: str) -> Optional[str]:
 # dependency unless these functions are used.
 
 @functools.lru_cache()
-def get_libusb1_backend() -> Optional["IBackend"]:
+def get_libusb1_backend() -> Optional[IBackend]:
     """@brief Return a usb backend for pyusb."""
     import usb.backend.libusb1
     return usb.backend.libusb1.get_backend(find_library=find_library)
