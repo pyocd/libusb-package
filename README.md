@@ -32,8 +32,8 @@ if available.
 
 You can also install from a clone of the git repository by running `pip install .` from the repository root directory.
 Editable installs are supported. Please note that running `setup.py` directly is no longer supported for PEP 517
-compliant packages. When building from the repo, because libusb 1.0.24 does not support out of tree builds, the build is
-done in-place in the `src/libusb` directory. `make clean` is run before compiling to ensure a clean build.
+compliant packages. Building libusb is done out of tree in an automatically created build directory for libusb 1.0.25
+and later.
 
 
 ## APIs
@@ -42,7 +42,7 @@ There are four public functions exported by `libusb_package`.
 
 - `find(*args, **kwargs)`: Wrapper around pyusb's `usb.core.find()` that sets the `backend`
     parameter to a libusb1 backend created from the libusb library included in `libusb_package`.
-    All other parameters are passed unmodified
+    All other parameters are passed unmodified.
 
 - `get_libusb1_backend()`: Returns a `pyusb` backend object for the libusb version contained
     in `libusb_package`.

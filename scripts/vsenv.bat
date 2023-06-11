@@ -1,6 +1,6 @@
-rem From: https://renenyffenegger.ch/notes/development/tools/scripts/personal/vsenv_bat
-
 @echo off
+
+rem From: https://renenyffenegger.ch/notes/development/tools/scripts/personal/vsenv_bat
 
 rem
 rem Uncomment setting VSCMD_DEBUG to enable debugging to output
