@@ -17,6 +17,8 @@ ignore_missing_imports = true
 
 [tool.cibuildwheel]
 before-build = "python -m pip install --upgrade pip wheel setuptools setuptools_scm"
+test-requires = "pyusb"
+test-command = 'python {project}/test.py'
 build-verbosity = 1
 
 [tool.cibuildwheel.linux]
