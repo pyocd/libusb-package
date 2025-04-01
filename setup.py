@@ -26,6 +26,7 @@ from pathlib import Path
 import sys
 from setuptools import setup, Extension, Distribution
 from setuptools.command.build_ext import build_ext
+from wheel.bdist_wheel import bdist_wheel
 import shutil
 import sysconfig
 
@@ -236,6 +237,18 @@ class libusb_build_ext(build_ext):
     return self._found_paths
 
 
+class libusb_bdist_wheel(bdist_wheel):
+    def finalize_options(self):
+        bdist_wheel.finalize_options(self)
+        # This is not a Pure python wheel, so it still needs to be platform specific.
+        self.root_is_pure = False
+
+    def get_tag(self):
+        python, abi, plat = bdist_wheel.get_tag(self)
+        # We can replace the python version and abi, and tag it compatible with all Python 3 versions.
+        return "py3", "none", plat
+
+
 class BinaryDistribution(Distribution):
     def has_ext_modules(self):
         return True
@@ -246,6 +259,7 @@ setup(
     # Dummy extension to trigger build_ext
     ext_modules=[Extension('', sources=[])],
     cmdclass={
-        'build_ext': libusb_build_ext
+        'build_ext': libusb_build_ext,
+        'bdist_wheel': libusb_bdist_wheel,
     },
 )
