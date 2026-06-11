@@ -108,5 +108,3 @@ def find(*args: Any, **kwargs: Any) -> Any:
     import usb.core
     backend = kwargs.pop('backend', get_libusb1_backend())
     return usb.core.find(*args, backend=backend, **kwargs)
-
-
