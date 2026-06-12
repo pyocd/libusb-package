@@ -113,4 +113,4 @@ submodule using `git -C src/libusb clean -dfx`.
 ### License
 
 The Python code for `libusb-package` is licensed with Apache 2.0.\
-The libusb library and its source code are licensed with GPLv2.
+The libusb library and its source code are licensed with LGPLv2.1.
