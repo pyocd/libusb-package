@@ -12,7 +12,7 @@ on:
       - 'pyproject.toml'
   pull_request:
     paths:
-      - '.github/workflows'
+      - '.github/workflows/**'
       - 'src/**'
       - 'setup.*'
       - 'pyproject.toml'
