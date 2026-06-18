@@ -6,13 +6,13 @@ name: Build wheels
 on:
   push:
     paths:
-      - '.github/workflows'
+      - '.github/workflows/**'
       - 'src/**'
       - 'setup.*'
       - 'pyproject.toml'
   pull_request:
     paths:
-      - '.github/workflows'
+      - '.github/workflows/**'
       - 'src/**'
       - 'setup.*'
       - 'pyproject.toml'
