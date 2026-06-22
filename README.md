@@ -23,7 +23,7 @@ This means the libusb build requirements must be installed:
 
 - Linux and macOS: autoconf, automake, libtool, and m4. As mentioned above, libusb is built without udev support,
     so libudev-dev is not required on Linux.
-- Windows: Visual Studio 2019 (Community is ok).
+- Windows: Visual Studio 2019 or later (Community is ok).
 
 If the libusb build fails when installing from a source distribution, the `libusb-package` install _will still
 succeed_. In this case, an "empty" `libusb-package` is installed that doesn't contain a libusb shared library.
@@ -32,8 +32,8 @@ if available.
 
 You can also install from a clone of the git repository by running `pip install .` from the repository root directory.
 Editable installs are supported. Please note that running `setup.py` directly is no longer supported for PEP 517
-compliant packages. When building from the repo, because libusb 1.0.24 does not support out of tree builds, the build is
-done in-place in the `src/libusb` directory. `make clean` is run before compiling to ensure a clean build.
+compliant packages. Building libusb is done out of tree in an automatically created build directory for libusb 1.0.25
+and later.
 
 
 ## APIs
@@ -42,7 +42,7 @@ There are four public functions exported by `libusb_package`.
 
 - `find(*args, **kwargs)`: Wrapper around pyusb's `usb.core.find()` that sets the `backend`
     parameter to a libusb1 backend created from the libusb library included in `libusb_package`.
-    All other parameters are passed unmodified
+    All other parameters are passed unmodified.
 
 - `get_libusb1_backend()`: Returns a `pyusb` backend object for the libusb version contained
     in `libusb_package`.
@@ -64,7 +64,7 @@ Both `get_libusb1_backend()` and `get_library_path()` cache their return values.
 ## Versioning
 
 The version of libusb-package is composed of the libusb version plus an additional field for
-the version of the Python code. For instance, 1.0.24.0. The Python code version will be reset
+the version of the Python code. For instance, 1.0.30.0. The Python code version will be reset
 to 0 when the libusb version is incremented for new libusb release.
 
 
