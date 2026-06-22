@@ -1,5 +1,6 @@
 # Copyright (c) 2021 Chris Reed
 # Copyright (c) 2022 Mitchell Kline
+# Copyright (c) 2026 Arm Limited
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -39,7 +40,7 @@ VSENV_SCRIPT = SCRIPTS_DIR / "vsenv.bat"
 LIBUSB_DIR = ROOT_DIR / "src" / "libusb"
 BOOTSTRAP_SCRIPT = LIBUSB_DIR / "bootstrap.sh"
 CONFIGURE_SCRIPT = LIBUSB_DIR / "configure"
-VS_PROJ = LIBUSB_DIR / "msvc" / "libusb_dll_2019.vcxproj"
+VS_PROJ = LIBUSB_DIR / "msvc" / "libusb_dll.vcxproj"
 
 PACKAGE_NAME = 'libusb_package'
 
@@ -98,12 +99,9 @@ class libusb_build_ext(build_ext):
         build_lib = ROOT_DIR / Path(build_py.get_package_dir(PACKAGE_NAME)).parent
     else:
         build_lib = Path(os.path.abspath(self.build_lib))
-#     build_temp = Path(os.path.abspath(self.build_temp))
 
-    # Build in-tree for the time being. libusb commit 1001cb5 adds support for out of tree builds, but
-    # this is not yet supported in an existing release. Once libusb version 1.0.25 is released, we can
-    # build out of tree.
-    build_temp = LIBUSB_DIR
+    # Build out of tree. Requires libusb 1.0.25 and later which adds support for out of tree builds.
+    build_temp = Path(os.path.abspath(self.build_temp))
 
     print(f"build_temp = {build_temp}")
     print(f"build_lib = {build_lib}")
@@ -157,7 +155,6 @@ class libusb_build_ext(build_ext):
                     self.spawn(['env']) # Dump environment for debugging purposes.
                     self.spawn(['bash', str(BOOTSTRAP_SCRIPT)])
                     self.spawn(['bash', str(CONFIGURE_SCRIPT), *extra_configure_args])
-                    self.spawn(['make', 'clean'])
                     self.spawn(['make', f'-j{os.cpu_count() or 4}', 'all'])
                 except Exception as err:
                     # Exception is caught here and reraised as our specific Exception class because the actual
@@ -179,16 +176,25 @@ class libusb_build_ext(build_ext):
             else:
                 platform = "x64" if IS_64_BIT else "x86"
                 config = "Release"
+                # Keep MSBuild outputs out of src/libusb by redirecting IntDir. libusb_dll.vcxproj derives
+                # OutDir from IntDir, so the DLL is emitted next to this directory in a sibling "dll" dir.
+                int_dir = build_temp / "obj"
+                out_dir = int_dir.parent / "dll"
+                properties = {
+                    "Configuration": config,
+                    "Platform": platform,
+                    "IntDir": str(int_dir) + "\\", # Must end with trailing slash.
+                }
+                property_values = ';'.join(f'{k}={v}' for k, v in properties.items())
+                msbuild_cmd = f'msbuild -p:{property_values} {VS_PROJ}'
 
                 try:
-                    self.spawn(['cmd.exe', '/c', f'{VSENV_SCRIPT} && '
-                            f'msbuild -p:Configuration={config} -p:Platform={platform} {VS_PROJ}'])
+                    self.spawn(['cmd.exe', '/c', f'{VSENV_SCRIPT} && {msbuild_cmd}'])
                 except Exception as err:
                     # See comment above for notes about this exception handler.
                     raise LibusbBuildError(str(err)) from err
 
-                out_dir = "x64" if IS_64_BIT else "Win32"
-                lib_paths = [Path(g) for g in glob.glob(f"{out_dir}\\{config}\\dll\\*.dll")]
+                lib_paths = [Path(g) for g in glob.glob(f"{out_dir}\\*.dll")]
 
             if not lib_paths:
                 raise LibusbBuildError(f"libusb failed to build: no libraries found in {build_temp}")
