@@ -174,6 +174,7 @@ class libusb_build_ext(build_ext):
                 # Sort libs by filename length. The shortest filename should be the most generic version.
                 lib_paths = sorted(lib_paths, key=lambda x: len(x.name))
             else:
+                toolset = "v143"  # Use the latest toolset available in Visual Studio 2022.
                 platform = "x64" if IS_64_BIT else "x86"
                 config = "Release"
                 # Keep MSBuild outputs out of src/libusb by redirecting IntDir. libusb_dll.vcxproj derives
@@ -181,8 +182,9 @@ class libusb_build_ext(build_ext):
                 int_dir = build_temp / "obj"
                 out_dir = int_dir.parent / "dll"
                 properties = {
-                    "Configuration": config,
+                    "PlatformToolset": toolset,
                     "Platform": platform,
+                    "Configuration": config,
                     "IntDir": str(int_dir) + "\\", # Must end with trailing slash.
                 }
                 property_values = ';'.join(f'{k}={v}' for k, v in properties.items())
