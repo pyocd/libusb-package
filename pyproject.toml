@@ -16,6 +16,10 @@ files = "src/libusb_package"
 ignore_missing_imports = true
 
 [tool.cibuildwheel]
+# The wheel is tagged py3-none-<plat> by libusb_bdist_wheel.get_tag() in setup.py (the extension
+# doesn't touch the CPython C API), so it's compatible with any CPython 3.9+ build, including
+# free-threaded. One interpreter per platform/arch is enough; python_requires = >=3.9 in setup.cfg.
+build = "cp39-*"
 before-build = "python -m pip install --upgrade pip wheel setuptools setuptools_scm"
 build-verbosity = 1
 
