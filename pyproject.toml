@@ -21,6 +21,8 @@ ignore_missing_imports = true
 # free-threaded. One interpreter per platform/arch is enough; python_requires = >=3.9 in setup.cfg.
 build = "cp39-*"
 before-build = "python -m pip install --upgrade pip wheel setuptools setuptools_scm"
+test-requires = "pyusb"
+test-command = 'python {project}/test.py'
 build-verbosity = 1
 
 [tool.cibuildwheel.linux]
