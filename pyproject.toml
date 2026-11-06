@@ -24,7 +24,7 @@ before-build = "python -m pip install --upgrade pip wheel setuptools setuptools_
 build-verbosity = 1
 
 [tool.cibuildwheel.linux]
-archs = ["auto", "aarch64"]
+archs = ["auto", "i686", "aarch64"]
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
